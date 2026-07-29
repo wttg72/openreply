@@ -6,6 +6,20 @@ import { ensureWorkspaceForUser, getPrimaryWorkspace } from "@/lib/workspace";
 
 type AdapterPrismaClient = Parameters<typeof PrismaAdapter>[0];
 
+/**
+ * Sign-in allowlist. `ALLOWED_EMAILS` is a comma-separated list; each entry is
+ * trimmed and compared case-insensitively. An unset or empty list denies
+ * everyone -- an absent allowlist is a closed door, never an open one.
+ */
+export function isAllowedEmail(email?: string | null): boolean {
+  const allowed = (process.env.ALLOWED_EMAILS ?? "")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  const candidate = (email ?? "").trim().toLowerCase();
+  return candidate !== "" && allowed.includes(candidate);
+}
+
 export const authConfig = {
   adapter: PrismaAdapter(prisma as unknown as AdapterPrismaClient),
   providers: [
@@ -15,6 +29,11 @@ export const authConfig = {
     }),
   ],
   callbacks: {
+    // Runs before the magic link is generated, so a rejected address never
+    // gets an email, a VerificationToken row, or a User row.
+    async signIn({ user }) {
+      return isAllowedEmail(user?.email);
+    },
     async session({ session, user }) {
       if (session.user) {
         session.user.id = user.id;

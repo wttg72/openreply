@@ -2,7 +2,11 @@ import NextAuth, { type NextAuthConfig } from "next-auth";
 import Resend from "next-auth/providers/resend";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/db/client";
-import { ensureWorkspaceForUser, getPrimaryWorkspace } from "@/lib/workspace";
+import {
+  ensureWorkspaceForUser,
+  readActiveWorkspaceId,
+  resolveWorkspaceForUser,
+} from "@/lib/workspace";
 
 type AdapterPrismaClient = Parameters<typeof PrismaAdapter>[0];
 
@@ -70,14 +74,9 @@ export async function getCurrentWorkspaceId(): Promise<string | null> {
   const userId = await getCurrentUserId();
   if (!userId) return null;
 
-  const workspace = await getPrimaryWorkspace(userId);
-  if (workspace) return workspace.id;
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { email: true },
-  });
-
-  const createdWorkspace = await ensureWorkspaceForUser(userId, user?.email);
-  return createdWorkspace.id;
+  const resolution = await resolveWorkspaceForUser(
+    userId,
+    await readActiveWorkspaceId(userId)
+  );
+  return resolution.status === "resolved" ? resolution.workspace.id : null;
 }

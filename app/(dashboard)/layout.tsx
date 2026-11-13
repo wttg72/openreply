@@ -2,7 +2,11 @@ import { redirect } from "next/navigation";
 import DashboardShell from "@/components/dashboard-shell";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/client";
-import { ensureWorkspaceForUser } from "@/lib/workspace";
+import {
+  acceptPendingInvitationsForUser,
+  readActiveWorkspaceId,
+  resolveWorkspaceForUser,
+} from "@/lib/workspace";
 
 export default async function DashboardLayout({
   children,
@@ -15,10 +19,15 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const workspace = await ensureWorkspaceForUser(
+  await acceptPendingInvitationsForUser(session.user.id, session.user.email);
+  const resolution = await resolveWorkspaceForUser(
     session.user.id,
-    session.user.email
+    await readActiveWorkspaceId(session.user.id)
   );
+  if (resolution.status !== "resolved") {
+    redirect("/workspace");
+  }
+  const { workspace } = resolution;
   const accounts = await prisma.instagramAccount.findMany({
     where: { workspaceId: workspace.id },
     orderBy: { connectedAt: "desc" },
